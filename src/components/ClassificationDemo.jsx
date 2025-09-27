@@ -1,8 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from 'recharts';
 import { Slider } from './ui/slider';
-
-const TOTAL_POPULATION = 1000000;
+import {
+  TOTAL_POPULATION,
+  generateData,
+  calculateMetrics,
+  calculatePerformanceMetrics
+} from '../utils/math';
 
 
 const SliderControl = React.memo(({ label, value, onChange, min, max, step = 1 }) => (
@@ -11,6 +15,7 @@ const SliderControl = React.memo(({ label, value, onChange, min, max, step = 1 }
     <Slider value={[value]} onValueChange={([v]) => onChange(v)} min={min} max={max} step={step} />
   </div>
 ));
+SliderControl.displayName = 'SliderControl';
 
 const MetricDisplay = React.memo(({ name, formula, calculation, value }) => (
   <div className="border p-2 rounded text-sm">
@@ -20,6 +25,7 @@ const MetricDisplay = React.memo(({ name, formula, calculation, value }) => (
     <p className="font-semibold">Value: {value.toFixed(4)}</p>
   </div>
 ));
+MetricDisplay.displayName = 'MetricDisplay';
 
 const ClassificationDemo = React.memo(() => {
   const [prevalence, setPrevalence] = useState(0.3);
@@ -30,49 +36,24 @@ const ClassificationDemo = React.memo(() => {
   const [operatingPoint, setOperatingPoint] = useState(50);
 
   const data = useMemo(() => {
-    const newData = [];
-    const oneMinusPrevalence = 1 - prevalence;
-    const posStdevSqrt2Pi = positiveSd * Math.sqrt(2 * Math.PI);
-    const negStdevSqrt2Pi = negativeSd * Math.sqrt(2 * Math.PI);
-    const twoPosSdSquared = 2 * positiveSd * positiveSd;
-    const twoNegSdSquared = 2 * negativeSd * negativeSd;
-
-    for (let x = 0; x <= 100; x++) {
-      const positiveDiff = x - positiveMean;
-      const negativeDiff = x - negativeMean;
-
-      const positiveY = (prevalence / posStdevSqrt2Pi) * Math.exp(-(positiveDiff * positiveDiff) / twoPosSdSquared);
-      const negativeY = (oneMinusPrevalence / negStdevSqrt2Pi) * Math.exp(-(negativeDiff * negativeDiff) / twoNegSdSquared);
-
-      newData.push({ x, positiveY, negativeY });
-    }
-    return newData;
+    return generateData({
+      prevalence,
+      positiveMean,
+      positiveSd,
+      negativeMean,
+      negativeSd
+    });
   }, [prevalence, positiveMean, positiveSd, negativeMean, negativeSd]);
 
   const metrics = useMemo(() => {
-    const totalPositive = data.reduce((sum, d) => sum + d.positiveY, 0);
-    const totalNegative = data.reduce((sum, d) => sum + d.negativeY, 0);
-    const scaleFactor = TOTAL_POPULATION / (totalPositive + totalNegative);
-
-    const tp = Math.round(data.filter(d => d.x >= operatingPoint).reduce((sum, d) => sum + d.positiveY, 0) * scaleFactor);
-    const fn = Math.round(data.filter(d => d.x < operatingPoint).reduce((sum, d) => sum + d.positiveY, 0) * scaleFactor);
-    const fp = Math.round(data.filter(d => d.x >= operatingPoint).reduce((sum, d) => sum + d.negativeY, 0) * scaleFactor);
-    const tn = Math.round(data.filter(d => d.x < operatingPoint).reduce((sum, d) => sum + d.negativeY, 0) * scaleFactor);
-
-    const diff = TOTAL_POPULATION - (tp + fn + fp + tn);
-    return { tp: tp + diff, fn, fp, tn };
+    return calculateMetrics(data, operatingPoint);
   }, [data, operatingPoint]);
 
   const { tp, fn, fp, tn } = metrics;
 
   const performanceMetrics = useMemo(() => {
-    const sensitivity = tp / (tp + fn);
-    const specificity = tn / (tn + fp);
-    const ppv = tp / (tp + fp);
-    const npv = tn / (tn + fn);
-    const accuracy = (tp + tn) / (tp + tn + fp + fn);
-    return { sensitivity, specificity, ppv, npv, accuracy };
-  }, [tp, fn, fp, tn]);
+    return calculatePerformanceMetrics(metrics);
+  }, [metrics]);
 
   const { sensitivity, specificity, ppv, npv, accuracy } = performanceMetrics;
 
@@ -245,5 +226,6 @@ const ClassificationDemo = React.memo(() => {
     </div>
   );
 });
+ClassificationDemo.displayName = 'ClassificationDemo';
 
 export default ClassificationDemo;
